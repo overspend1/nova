@@ -50,4 +50,3 @@ Core execution blocks these actions if the approval map is missing or rejected.
 - Core defaults to indexing user profile context and stores runtime data under `%USERPROFILE%\.nova`.
 - Install command execution is disabled unless `NOVA_ALLOW_INSTALL_COMMANDS=true`.
 - Desktop wake-word loop currently uses a placeholder polling loop with push-to-talk fallback fully wired.
-
