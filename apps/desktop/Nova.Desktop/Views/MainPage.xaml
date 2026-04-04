@@ -5,7 +5,61 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
-    <Grid>
-        <TextBlock Text="Nova" />
+    <Grid Padding="20" RowSpacing="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="2*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <TextBlock Text="Nova Native Console" FontSize="24" FontWeight="SemiBold" />
+            <TextBlock Text="Wake-word + PTT fallback, approval-gated execution." VerticalAlignment="Bottom" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="PromptBox" PlaceholderText="Ask Nova to plan, bootstrap, or analyze." />
+            <Button Grid.Column="1" Content="Plan" Click="OnPlanClicked" />
+            <Button Grid.Column="2" Content="Execute Dry Run" Click="OnExecuteDryRunClicked" />
+            <Button Grid.Column="3" Content="Bootstrap Dry Run" Click="OnBootstrapDryRunClicked" />
+            <Button Grid.Column="4" Content="Push-To-Talk" Click="OnPushToTalkClicked" />
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Spacing="10">
+                <TextBlock Text="Response" FontSize="16" FontWeight="SemiBold" />
+                <TextBox x:Name="ResponseBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="230" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Spacing="10">
+                <TextBlock Text="Execution Safety" FontSize="16" FontWeight="SemiBold" />
+                <CheckBox x:Name="ApproveWritesCheckbox" Content="Approve write/bootstrap steps" IsChecked="False" />
+                <CheckBox x:Name="ApproveSystemCheckbox" Content="Approve system/install steps" IsChecked="False" />
+                <Button Content="Execute Last Plan (Approved Steps Only)" Click="OnExecuteApprovedClicked" />
+                <TextBlock Text="Voice Mode" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <ToggleSwitch x:Name="WakeWordToggle" Header="Wake Word Loop" Toggled="OnWakeWordToggled" />
+                <TextBlock x:Name="VoiceStatusText" Text="Voice idle." TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Spacing="10">
+            <TextBlock Text="Audit Timeline" FontSize="16" FontWeight="SemiBold" />
+            <Button Content="Refresh Audit" HorizontalAlignment="Left" Click="OnRefreshAuditClicked" />
+            <TextBox x:Name="AuditBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+        </StackPanel>
     </Grid>
 </Page>
