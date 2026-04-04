@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/desktop/">
+    <Project Path="apps/desktop/Nova.Desktop/Nova.Desktop.csproj" />
+  </Folder>
+</Solution>

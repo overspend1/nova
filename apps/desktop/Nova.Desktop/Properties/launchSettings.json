@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "NovaDesktopTemplate (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "NovaDesktopTemplate (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

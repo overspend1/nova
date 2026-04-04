@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": [
+    "../apps/core/src/**/*.ts",
+    "../apps/cli/src/**/*.ts",
+    "../packages/bootstrap/src/**/*.ts",
+    "../packages/memory/src/**/*.ts",
+    "./**/*.ts"
+  ]
+}

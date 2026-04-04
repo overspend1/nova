@@ -1,0 +1,25 @@
+{
+  "name": "nova",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nova v1 - Native Windows second mind for developer workflows",
+  "packageManager": "pnpm@10.8.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tests"
+  ],
+  "scripts": {
+    "dev:core": "pnpm --filter @nova/core dev",
+    "dev:cli": "pnpm --filter @nova/cli dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
