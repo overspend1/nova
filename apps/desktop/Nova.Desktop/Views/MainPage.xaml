@@ -42,7 +42,7 @@
 
             <StackPanel Spacing="10">
                 <TextBlock Text="Response" FontSize="16" FontWeight="SemiBold" />
-                <TextBox x:Name="ResponseBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="230" />
+                <TextBox x:Name="ResponseBox" AcceptsReturn="True" TextWrapping="Wrap" Height="230" />
             </StackPanel>
 
             <StackPanel Grid.Column="1" Spacing="10">
@@ -59,7 +59,7 @@
         <StackPanel Grid.Row="3" Spacing="10">
             <TextBlock Text="Audit Timeline" FontSize="16" FontWeight="SemiBold" />
             <Button Content="Refresh Audit" HorizontalAlignment="Left" Click="OnRefreshAuditClicked" />
-            <TextBox x:Name="AuditBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+            <TextBox x:Name="AuditBox" AcceptsReturn="True" TextWrapping="Wrap" />
         </StackPanel>
     </Grid>
 </Page>

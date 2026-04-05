@@ -1,0 +1,2 @@
+"""Nova Python desktop package."""
+

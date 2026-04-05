@@ -1,52 +1,86 @@
-# Nova v1
+# Nova (Python-First)
 
-Nova is a native Windows "second mind" assistant for developer workflows.
+Nova is now structured as a Python-native developer assistant stack:
 
-## What Is Implemented
+- Core API: `FastAPI` (`python/nova_core`)
+- Desktop app: `PySide6` (`python/nova_desktop`)
+- Launch scripts: `python/start_core.py`, `python/start_desktop.py`, `python/start_nova.py`
 
-- Native desktop shell with WinUI (`apps/desktop/Nova.Desktop`)
-- Local TypeScript core service over authenticated named pipes (`apps/core`)
-- Shared typed contracts (`packages/contracts`)
-- Opinionated full-stack bootstrap generator (`packages/bootstrap`)
-- Local memory store with workspace context (`packages/memory`)
-- CLI with Zed integration (`apps/cli`)
-- Unit/integration/e2e tests (`tests`)
+The legacy TypeScript/.NET implementation is still in the repo, but the Python stack is the primary path.
 
-## Core API (Named Pipe HTTP)
+## Features in Python Stack
 
 - `POST /intent/parse`
 - `POST /actions/plan`
 - `POST /actions/execute`
+- `GET /actions/catalog`
+- `POST /assistant/respond`
+- `POST /agent/task`
+- `GET /agent/tasks`
+- `GET /agent/task/{task_id}`
+- `POST /agent/task/{task_id}/approve`
+- `POST /agent/task/{task_id}/cancel`
 - `POST /bootstrap/create`
 - `POST /memory/search`
 - `POST /memory/upsert`
+- `POST /memory/context`
 - `GET /audit/timeline`
+- `GET /meta/capabilities`
+- `GET /meta/model`
 
-## Security Gate
+Safety behavior:
 
-Any mutating/system operation is approval-gated:
+- Mutating/system actions require explicit approval.
+- Commands are allowlisted by action type.
+- Audit timeline is append-only JSONL.
+- Capability catalog is explicit and queryable (tool-style interface).
+- Autonomous tasks can replan once after failure and pause on blocked approvals.
 
-- file writes / bootstrap
-- package install
-- git/system/network command classes
+Mark-style architecture now included:
 
-Core execution blocks these actions if the approval map is missing or rejected.
+- Tool registry (`python/nova_core/actions`) with explicit risk + approval metadata.
+- Agent planner/executor/task queue (`python/nova_core/agent`) with status lifecycle.
+- Desktop "Command Center" UI with queue controls (queue/view/approve/cancel).
 
-## Quick Start
+AI model behavior:
 
-1. Install dependencies:
-   - `pnpm install`
-2. Start core:
-   - `pnpm --filter @nova/core dev`
-3. In another shell, set token from core logs:
-   - PowerShell: `$env:NOVA_AUTH_TOKEN="<token>"`
-4. Install Zed tasks in any workspace:
-   - `pnpm --filter @nova/cli dev -- zed install C:\path\to\workspace`
-5. Optional desktop app:
-   - Open `apps/desktop/Nova.Desktop/Nova.Desktop.csproj` in Visual Studio 2022 and run.
+- Default provider: `ollama`
+- Default model: `qwen3:4b`
+- Endpoint: `NOVA_OLLAMA_URL` (default `http://127.0.0.1:11434/api/chat`)
 
-## Notes
+Install local model:
 
-- Core defaults to indexing user profile context and stores runtime data under `%USERPROFILE%\.nova`.
-- Install command execution is disabled unless `NOVA_ALLOW_INSTALL_COMMANDS=true`.
-- Desktop wake-word loop currently uses a placeholder polling loop with push-to-talk fallback fully wired.
+1. Install Ollama: [ollama.com/download](https://ollama.com/download)
+2. Pull model:
+   - `ollama pull qwen3:4b`
+3. Start Ollama (if not auto-started) and run Nova.
+
+## Quick Start (Windows)
+
+1. Install Python deps:
+   - `python -m pip install -r python/requirements.txt`
+2. Start both core + desktop together:
+   - `python python/start_nova.py`
+   - `start_nova.py` auto-selects a free local port if `8765` is already in use and keeps core+desktop auth tokens aligned.
+
+Manual start:
+
+1. Start core:
+   - `set NOVA_AUTH_TOKEN=your-token`
+   - `python python/start_core.py`
+2. Start desktop:
+   - `set NOVA_AUTH_TOKEN=your-token`
+   - `python python/start_desktop.py`
+
+PowerShell equivalent:
+
+- `$env:NOVA_AUTH_TOKEN="your-token"; python python/start_core.py`
+- `$env:NOVA_AUTH_TOKEN="your-token"; python python/start_desktop.py`
+
+## Runtime Defaults
+
+- Host: `127.0.0.1`
+- Port: `8765`
+- Data path: `%USERPROFILE%\.nova-py`
+- Install commands disabled unless `NOVA_ALLOW_INSTALL_COMMANDS=true`
+- Override model with `NOVA_LOCAL_MODEL=<model-name>`

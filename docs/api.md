@@ -23,6 +23,7 @@ All endpoints are served over named-pipe HTTP and require:
 ```
 
 Returns parsed intent, model route, and risk-labelled action steps.
+Also returns `approvalRequests` for every step that requires explicit confirmation.
 
 ## `POST /actions/execute`
 
@@ -69,11 +70,14 @@ Set `mode` to `execute` and pass `approvedActionIds` to materialize files.
 {
   "query": "fastify",
   "scope": "workspace",
-  "limit": 5
+  "limit": 5,
+  "workspaceLimit": 5,
+  "refreshIndex": true
 }
 ```
+
+Returns memory records plus `workspaceMatches` from profile index search.
 
 ## `GET /audit/timeline?limit=20`
 
 Returns append-only execution history.
-

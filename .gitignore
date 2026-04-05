@@ -16,3 +16,8 @@ apps/desktop/Nova.Desktop/bin/
 apps/desktop/Nova.Desktop/obj/
 apps/desktop/Nova.Desktop/packages/
 .nova/
+.venv/
+venv/
+__pycache__/
+*.pyc
+python/.nova-py/

@@ -3,16 +3,21 @@ import type { ActionStep, BootstrapSpec } from "@nova/contracts";
 
 const DEFAULT_PROJECT_NAME = "nova-generated-app";
 
+export interface BootstrapSpecValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
 export function inferBootstrapSpecFromBrief(
   brief: string,
   targetDirectory: string
 ): BootstrapSpec {
-  const sanitized = brief.toLowerCase();
-  const projectName =
+  const inferredName =
     extractProjectName(brief) ??
-    (sanitized.includes("api") ? "nova-service" : DEFAULT_PROJECT_NAME);
+    (brief.toLowerCase().includes("api") ? "nova-service" : DEFAULT_PROJECT_NAME);
+  const projectName = sanitizeProjectName(inferredName);
 
-  return {
+  const spec: BootstrapSpec = {
     projectName,
     targetDirectory,
     description: brief,
@@ -28,9 +33,45 @@ export function inferBootstrapSpecFromBrief(
       githubActions: true
     }
   };
+
+  ensureBootstrapSpecValid(spec);
+  return spec;
+}
+
+export function validateBootstrapSpec(
+  spec: BootstrapSpec
+): BootstrapSpecValidationResult {
+  const errors: string[] = [];
+
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(spec.projectName)) {
+    errors.push("projectName must be a slug-like value (letters, numbers, hyphens).");
+  }
+
+  if (!spec.targetDirectory.trim()) {
+    errors.push("targetDirectory is required.");
+  }
+
+  if (spec.packageManager !== "pnpm") {
+    errors.push("Only pnpm is supported in Nova v1.");
+  }
+
+  if (spec.stack === "ts-fullstack-default") {
+    if (!spec.features.web || !spec.features.api || !spec.features.worker) {
+      errors.push("Default stack requires web, api, and worker features.");
+    }
+    if (!spec.features.postgres || !spec.features.redis) {
+      errors.push("Default stack requires postgres and redis features.");
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
 }
 
 export function planBootstrapActions(spec: BootstrapSpec): ActionStep[] {
+  ensureBootstrapSpecValid(spec);
   const targetRoot = path.join(spec.targetDirectory, spec.projectName);
   return [
     {
@@ -46,11 +87,11 @@ export function planBootstrapActions(spec: BootstrapSpec): ActionStep[] {
       id: "bootstrap-write-files",
       title: "Write project files",
       description:
-        "Generate web/api/worker apps, Docker Compose, CI workflow, env templates, and docs.",
+        "Generate Next.js web app, Fastify API, BullMQ worker, Docker Compose, CI workflow, env templates, and docs.",
       kind: "bootstrap",
       risk: "high",
       requiresApproval: true,
-      dryRunPreview: "write ~30 scaffold files"
+      dryRunPreview: "write production-ready monorepo scaffold"
     },
     {
       id: "bootstrap-install",
@@ -61,7 +102,8 @@ export function planBootstrapActions(spec: BootstrapSpec): ActionStep[] {
       requiresApproval: true,
       command: "pnpm",
       args: ["install"],
-      dryRunPreview: "pnpm install"
+      workingDirectory: targetRoot,
+      dryRunPreview: `cd ${targetRoot} && pnpm install`
     }
   ];
 }
@@ -69,9 +111,12 @@ export function planBootstrapActions(spec: BootstrapSpec): ActionStep[] {
 export function materializeBootstrapFiles(
   spec: BootstrapSpec
 ): Record<string, string> {
+  ensureBootstrapSpecValid(spec);
   const root = spec.projectName;
-  const files: Record<string, string> = {
+  return {
     [`${root}/.gitignore`]: scaffoldGitignore(),
+    [`${root}/.editorconfig`]: scaffoldEditorConfig(),
+    [`${root}/.npmrc`]: scaffoldNpmrc(),
     [`${root}/README.md`]: scaffoldReadme(spec),
     [`${root}/pnpm-workspace.yaml`]: scaffoldPnpmWorkspace(),
     [`${root}/package.json`]: scaffoldRootPackageJson(spec),
@@ -84,27 +129,51 @@ export function materializeBootstrapFiles(
     [`${root}/apps/web/tsconfig.json`]: scaffoldWebTsconfig(),
     [`${root}/apps/web/app/layout.tsx`]: scaffoldWebLayout(),
     [`${root}/apps/web/app/page.tsx`]: scaffoldWebPage(),
+    [`${root}/apps/web/app/globals.css`]: scaffoldWebCss(),
+    [`${root}/apps/web/.env.local.example`]: scaffoldWebEnvExample(),
     [`${root}/apps/api/package.json`]: scaffoldApiPackageJson(),
     [`${root}/apps/api/tsconfig.json`]: scaffoldApiTsconfig(),
     [`${root}/apps/api/src/index.ts`]: scaffoldApiEntry(),
+    [`${root}/apps/api/src/routes/health.ts`]: scaffoldApiHealthRoute(),
+    [`${root}/apps/api/src/routes/jobs.ts`]: scaffoldApiJobsRoute(),
+    [`${root}/apps/api/.env.example`]: scaffoldApiEnvExample(),
     [`${root}/apps/worker/package.json`]: scaffoldWorkerPackageJson(),
     [`${root}/apps/worker/tsconfig.json`]: scaffoldWorkerTsconfig(),
     [`${root}/apps/worker/src/index.ts`]: scaffoldWorkerEntry(),
+    [`${root}/apps/worker/.env.example`]: scaffoldWorkerEnvExample(),
     [`${root}/packages/shared/package.json`]: scaffoldSharedPackageJson(),
     [`${root}/packages/shared/tsconfig.json`]: scaffoldSharedTsconfig(),
     [`${root}/packages/shared/src/index.ts`]: scaffoldSharedEntry(),
-    [`${root}/docs/architecture.md`]: scaffoldArchitectureDoc(spec)
+    [`${root}/packages/shared/src/queue.ts`]: scaffoldSharedQueue(),
+    [`${root}/docs/architecture.md`]: scaffoldArchitectureDoc(spec),
+    [`${root}/docs/runbook.md`]: scaffoldRunbookDoc()
   };
+}
 
-  return files;
+function ensureBootstrapSpecValid(spec: BootstrapSpec): void {
+  const validation = validateBootstrapSpec(spec);
+  if (!validation.valid) {
+    throw new Error(`Invalid bootstrap spec: ${validation.errors.join(" ")}`);
+  }
 }
 
 function extractProjectName(brief: string): string | undefined {
-  const match = brief.match(/(?:called|named)\s+([a-zA-Z0-9-_]+)/i);
-  if (!match) {
-    return undefined;
+  const quoted = brief.match(/(?:called|named)\s+["']([^"']+)["']/i);
+  if (quoted?.[1]) {
+    return quoted[1];
   }
-  return match[1].toLowerCase().replace(/[^a-z0-9-_]/g, "");
+
+  const plain = brief.match(/(?:called|named)\s+([a-zA-Z0-9-_]+)/i);
+  return plain?.[1];
+}
+
+function sanitizeProjectName(input: string): string {
+  const normalized = input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || DEFAULT_PROJECT_NAME;
 }
 
 function scaffoldGitignore(): string {
@@ -114,6 +183,25 @@ dist/
 .env.local
 .next/
 coverage/
+pnpm-debug.log
+`;
+}
+
+function scaffoldEditorConfig(): string {
+  return `root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+`;
+}
+
+function scaffoldNpmrc(): string {
+  return `auto-install-peers=true
+strict-peer-dependencies=false
 `;
 }
 
@@ -123,7 +211,6 @@ function scaffoldReadme(spec: BootstrapSpec): string {
 Generated by Nova bootstrap.
 
 ## Stack
-
 - Web: Next.js (TypeScript)
 - API: Fastify
 - Worker: BullMQ
@@ -132,11 +219,15 @@ Generated by Nova bootstrap.
 - Package manager: pnpm
 
 ## Quick Start
-
 \`\`\`bash
 pnpm install
-docker compose up -d
+pnpm dev:infra
 pnpm dev
+\`\`\`
+
+## One-command Validation
+\`\`\`bash
+pnpm check
 \`\`\`
 `;
 }
@@ -155,10 +246,13 @@ function scaffoldRootPackageJson(spec: BootstrapSpec): string {
       private: true,
       packageManager: "pnpm@10.8.1",
       scripts: {
-        dev: "pnpm -r --parallel dev",
-        build: "pnpm -r build",
-        test: "pnpm -r test",
-        lint: "pnpm -r lint"
+        dev: "pnpm --parallel --filter @nova/web --filter @nova/api --filter @nova/worker dev",
+        "dev:infra": "docker compose up -d",
+        "dev:all": "pnpm dev:infra && pnpm dev",
+        build: "pnpm -r --if-present build",
+        lint: "pnpm -r --if-present lint",
+        test: "pnpm -r --if-present test",
+        check: "pnpm lint && pnpm test && pnpm build"
       }
     },
     null,
@@ -182,9 +276,13 @@ function scaffoldTsconfigBase(): string {
 }
 
 function scaffoldEnvExample(): string {
-  return `DATABASE_URL=postgres://postgres:postgres@localhost:5432/nova
+  return `POSTGRES_DB=nova
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/nova
 REDIS_URL=redis://localhost:6379
-PORT=4000
+API_PORT=4000
+WEB_PORT=3000
 `;
 }
 
@@ -193,16 +291,29 @@ function scaffoldDockerCompose(): string {
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: nova
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 `;
 }
 
@@ -215,7 +326,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -227,20 +338,21 @@ jobs:
           node-version: 22
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile=false
-      - run: pnpm build
+      - run: pnpm lint
       - run: pnpm test
+      - run: pnpm build
 `;
 }
 
 function scaffoldWebPackageJson(): string {
   return JSON.stringify(
     {
-      name: "@app/web",
+      name: "@nova/web",
       private: true,
       scripts: {
-        dev: "next dev -p 3000",
+        dev: "next dev -p ${WEB_PORT:-3000}",
         build: "next build",
-        start: "next start -p 3000",
+        start: "next start -p ${WEB_PORT:-3000}",
         lint: "next lint",
         test: "echo \"no web tests yet\""
       },
@@ -251,6 +363,8 @@ function scaffoldWebPackageJson(): string {
       },
       devDependencies: {
         typescript: "^5.9.2",
+        eslint: "^9.32.0",
+        "eslint-config-next": "^15.3.0",
         "@types/react": "^19.1.3",
         "@types/node": "^24.5.2"
       }
@@ -285,10 +399,10 @@ function scaffoldWebTsconfig(): string {
 
 function scaffoldWebLayout(): string {
   return `import type { Metadata } from "next";
-import "./styles.css";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nova Web",
+  title: "Nova Workspace",
   description: "Generated by Nova"
 };
 
@@ -307,21 +421,53 @@ export default function RootLayout({
 }
 
 function scaffoldWebPage(): string {
-  return `export default function Page() {
+  return `export default async function Page() {
   return (
-    <main style={{ padding: "3rem", fontFamily: "Segoe UI, sans-serif" }}>
-      <h1>Nova Scaffold Ready</h1>
-      <p>Your web, API, and worker services are wired as a workspace.</p>
+    <main className="page">
+      <h1>Nova scaffold is ready</h1>
+      <p>Web, API, and Worker are wired in one pnpm monorepo.</p>
+      <ul>
+        <li>Run <code>pnpm dev:infra</code> to boot PostgreSQL and Redis.</li>
+        <li>Run <code>pnpm dev</code> to start all services.</li>
+      </ul>
     </main>
   );
 }
 `;
 }
 
+function scaffoldWebCss(): string {
+  return `:root {
+  color-scheme: light;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f6f8fb;
+  color: #172133;
+}
+
+.page {
+  max-width: 760px;
+  margin: 3rem auto;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 16px 36px rgba(21, 34, 56, 0.08);
+}
+`;
+}
+
+function scaffoldWebEnvExample(): string {
+  return `NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+`;
+}
+
 function scaffoldApiPackageJson(): string {
   return JSON.stringify(
     {
-      name: "@app/api",
+      name: "@nova/api",
       private: true,
       scripts: {
         dev: "tsx watch src/index.ts",
@@ -331,7 +477,10 @@ function scaffoldApiPackageJson(): string {
         lint: "tsc -p tsconfig.json --noEmit"
       },
       dependencies: {
-        fastify: "^5.6.0"
+        fastify: "^5.6.0",
+        bullmq: "^5.58.0",
+        ioredis: "^5.7.0",
+        "@nova/shared": "workspace:*"
       },
       devDependencies: {
         tsx: "^4.20.5",
@@ -358,11 +507,14 @@ function scaffoldApiTsconfig(): string {
 
 function scaffoldApiEntry(): string {
   return `import Fastify from "fastify";
+import { registerHealthRoutes } from "./routes/health.js";
+import { registerJobsRoutes } from "./routes/jobs.js";
 
 const app = Fastify({ logger: true });
-const port = Number(process.env.PORT ?? 4000);
+const port = Number(process.env.API_PORT ?? 4000);
 
-app.get("/health", async () => ({ ok: true }));
+await registerHealthRoutes(app);
+await registerJobsRoutes(app);
 
 app.listen({ port, host: "0.0.0.0" }).catch((error) => {
   app.log.error(error);
@@ -371,10 +523,50 @@ app.listen({ port, host: "0.0.0.0" }).catch((error) => {
 `;
 }
 
+function scaffoldApiHealthRoute(): string {
+  return `import type { FastifyInstance } from "fastify";
+
+export async function registerHealthRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/health", async () => ({
+    ok: true,
+    service: "api"
+  }));
+}
+`;
+}
+
+function scaffoldApiJobsRoute(): string {
+  return `import type { FastifyInstance } from "fastify";
+import { Queue } from "bullmq";
+import { JOB_QUEUE_NAME } from "@nova/shared";
+
+const queue = new Queue(JOB_QUEUE_NAME, {
+  connection: {
+    host: process.env.REDIS_HOST ?? "127.0.0.1",
+    port: Number(process.env.REDIS_PORT ?? 6379)
+  }
+});
+
+export async function registerJobsRoutes(app: FastifyInstance): Promise<void> {
+  app.post("/jobs/warmup", async () => {
+    const job = await queue.add("warmup", { createdAt: new Date().toISOString() });
+    return { ok: true, id: job.id };
+  });
+}
+`;
+}
+
+function scaffoldApiEnvExample(): string {
+  return `API_PORT=4000
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+`;
+}
+
 function scaffoldWorkerPackageJson(): string {
   return JSON.stringify(
     {
-      name: "@app/worker",
+      name: "@nova/worker",
       private: true,
       scripts: {
         dev: "tsx watch src/index.ts",
@@ -385,7 +577,8 @@ function scaffoldWorkerPackageJson(): string {
       },
       dependencies: {
         bullmq: "^5.58.0",
-        ioredis: "^5.7.0"
+        ioredis: "^5.7.0",
+        "@nova/shared": "workspace:*"
       },
       devDependencies: {
         tsx: "^4.20.5",
@@ -411,36 +604,39 @@ function scaffoldWorkerTsconfig(): string {
 }
 
 function scaffoldWorkerEntry(): string {
-  return `import { Queue, Worker } from "bullmq";
-
-const redisConnection = {
-  host: process.env.REDIS_HOST ?? "127.0.0.1",
-  port: Number(process.env.REDIS_PORT ?? 6379)
-};
-
-const queue = new Queue("jobs", { connection: redisConnection });
+  return `import { Worker } from "bullmq";
+import { JOB_QUEUE_NAME } from "@nova/shared";
 
 const worker = new Worker(
-  "jobs",
+  JOB_QUEUE_NAME,
   async (job) => {
-    console.log("Processing job", job.id, job.data);
-    return { processed: true };
+    console.log("Processing job", job.id, job.name, job.data);
+    return { processedAt: new Date().toISOString() };
   },
-  { connection: redisConnection }
+  {
+    connection: {
+      host: process.env.REDIS_HOST ?? "127.0.0.1",
+      port: Number(process.env.REDIS_PORT ?? 6379)
+    }
+  }
 );
 
 worker.on("completed", (job) => {
-  console.log("Completed job", job.id);
+  console.log("Completed", job.id);
 });
+`;
+}
 
-await queue.add("warmup", { createdAt: new Date().toISOString() });
+function scaffoldWorkerEnvExample(): string {
+  return `REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
 `;
 }
 
 function scaffoldSharedPackageJson(): string {
   return JSON.stringify(
     {
-      name: "@app/shared",
+      name: "@nova/shared",
       private: true,
       main: "dist/index.js",
       types: "dist/index.d.ts",
@@ -471,10 +667,12 @@ function scaffoldSharedTsconfig(): string {
 }
 
 function scaffoldSharedEntry(): string {
-  return `export interface HealthStatus {
-  ok: boolean;
-  service: string;
+  return `export * from "./queue.js";
+`;
 }
+
+function scaffoldSharedQueue(): string {
+  return `export const JOB_QUEUE_NAME = "nova-jobs";
 `;
 }
 
@@ -490,9 +688,25 @@ This repository was generated by Nova.
 
 ## Services
 - \`apps/web\`: Next.js frontend
-- \`apps/api\`: Fastify API
-- \`apps/worker\`: BullMQ worker
-- \`packages/shared\`: shared contracts/utilities
+- \`apps/api\`: Fastify API and queue ingress
+- \`apps/worker\`: BullMQ worker runtime
+- \`packages/shared\`: shared queue contract
 `;
 }
 
+function scaffoldRunbookDoc(): string {
+  return `# Runbook
+
+## Local Development
+1. Copy \`.env.example\` values as needed.
+2. Run \`pnpm install\`.
+3. Run \`pnpm dev:infra\`.
+4. Run \`pnpm dev\`.
+
+## Validation
+- \`pnpm lint\`
+- \`pnpm test\`
+- \`pnpm build\`
+- \`pnpm check\` to run all three in sequence.
+`;
+}

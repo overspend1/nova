@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
 import type { ActionStep, ApprovalDecision, ExecutionAudit } from "@nova/contracts";
 
 interface ExecutePlanInput {
@@ -52,9 +53,22 @@ export async function executePlan(input: ExecutePlanInput): Promise<ExecutionAud
       continue;
     }
 
+    if (!isStepCommandAllowed(step, input.allowInstallCommands)) {
+      stepAudit.status = "failed";
+      stepAudit.finishedAt = new Date().toISOString();
+      stepAudit.error = `Command '${step.command ?? "none"}' is not allowed for step kind '${step.kind}'.`;
+      stepsAudit.push(stepAudit);
+      status = "failed";
+      continue;
+    }
+
     try {
       if (step.command) {
-        const commandResult = await runCommand(step.command, step.args ?? []);
+        const commandResult = await runCommand(
+          step.command,
+          step.args ?? [],
+          step.workingDirectory
+        );
         stepAudit.status = commandResult.exitCode === 0 ? "succeeded" : "failed";
         stepAudit.details = commandResult.output;
         stepAudit.error =
@@ -93,11 +107,13 @@ export async function executePlan(input: ExecutePlanInput): Promise<ExecutionAud
 
 function runCommand(
   command: string,
-  args: string[]
+  args: string[],
+  workingDirectory?: string
 ): Promise<{ exitCode: number; output: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       shell: false,
+      cwd: workingDirectory ? path.resolve(workingDirectory) : undefined,
       stdio: ["ignore", "pipe", "pipe"]
     });
 
@@ -115,3 +131,46 @@ function runCommand(
   });
 }
 
+const SAFE_BASE_COMMANDS = new Set([
+  "node",
+  "npm",
+  "pnpm",
+  "corepack",
+  "git",
+  "python",
+  "python3"
+]);
+
+const SAFE_INSTALL_COMMANDS = new Set(["pnpm", "npm", "corepack"]);
+const SAFE_NETWORK_COMMANDS = new Set(["curl", "wget"]);
+
+function isStepCommandAllowed(
+  step: ActionStep,
+  allowInstallCommands: boolean
+): boolean {
+  if (!step.command) {
+    return true;
+  }
+
+  const baseCommand = normalizeCommandName(step.command);
+
+  if (step.kind === "install") {
+    return allowInstallCommands && SAFE_INSTALL_COMMANDS.has(baseCommand);
+  }
+
+  if (step.kind === "git") {
+    return baseCommand === "git";
+  }
+
+  if (step.kind === "network") {
+    return SAFE_NETWORK_COMMANDS.has(baseCommand);
+  }
+
+  return SAFE_BASE_COMMANDS.has(baseCommand);
+}
+
+function normalizeCommandName(command: string): string {
+  const parsed = path.parse(command.trim().toLowerCase());
+  const base = parsed.name || parsed.base;
+  return base.replace(/\.exe$/g, "");
+}

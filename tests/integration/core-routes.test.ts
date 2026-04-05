@@ -48,6 +48,26 @@ describe("core routes integration", () => {
     expect(body.route.route).toBe("cloud");
   });
 
+  it("returns approval requests for mutating plan steps", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/actions/plan",
+      headers: {
+        "x-nova-token": "test-token"
+      },
+      payload: {
+        input: "refactor auth module and run checks",
+        channel: "text"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(Array.isArray(body.approvalRequests)).toBe(true);
+    expect(body.approvalRequests.length).toBeGreaterThan(0);
+    expect(body.approvalRequests[0].actionId).toBeTypeOf("string");
+  });
+
   it("writes and reads memory records", async () => {
     const upsertResponse = await app.inject({
       method: "POST",
@@ -71,7 +91,10 @@ describe("core routes integration", () => {
       }
     });
     expect(searchResponse.statusCode).toBe(200);
-    expect(searchResponse.json().records.length).toBeGreaterThan(0);
+    const body = searchResponse.json();
+    expect(body.records.length).toBeGreaterThan(0);
+    expect(Array.isArray(body.workspaceMatches)).toBe(true);
+    expect(body.workspaceContext.excludeGlobs).toContain("node_modules");
   });
 });
 

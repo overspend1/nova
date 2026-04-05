@@ -48,5 +48,71 @@ describe("approval policy", () => {
     expect(["completed", "failed"]).toContain(audit.status);
     expect(["succeeded", "failed"]).toContain(audit.steps[0].status);
   });
+
+  it("blocks disallowed network command", async () => {
+    const audit = await executePlan({
+      runId: "run_3",
+      intentId: "intent_3",
+      mode: "execute",
+      steps: [
+        {
+          id: "net_1",
+          title: "Network command",
+          description: "Run disallowed command",
+          kind: "network",
+          risk: "high",
+          requiresApproval: true,
+          command: "powershell",
+          args: ["-Command", "Write-Host hi"]
+        }
+      ],
+      approvals: [
+        {
+          actionId: "net_1",
+          approved: true,
+          approver: "tester",
+          decidedAt: new Date().toISOString()
+        }
+      ],
+      allowInstallCommands: true
+    });
+
+    expect(audit.status).toBe("failed");
+    expect(audit.steps[0].status).toBe("failed");
+    expect(audit.steps[0].error).toContain("not allowed");
+  });
+
+  it("blocks install command when disabled by config", async () => {
+    const audit = await executePlan({
+      runId: "run_4",
+      intentId: "intent_4",
+      mode: "execute",
+      steps: [
+        {
+          id: "install_1",
+          title: "Install deps",
+          description: "Install dependencies",
+          kind: "install",
+          risk: "high",
+          requiresApproval: true,
+          command: "pnpm",
+          args: ["install"]
+        }
+      ],
+      approvals: [
+        {
+          actionId: "install_1",
+          approved: true,
+          approver: "tester",
+          decidedAt: new Date().toISOString()
+        }
+      ],
+      allowInstallCommands: false
+    });
+
+    expect(audit.status).toBe("failed");
+    expect(audit.steps[0].status).toBe("failed");
+    expect(audit.steps[0].error).toContain("disabled");
+  });
 });
 

@@ -39,6 +39,7 @@ export interface ActionStep {
   requiresApproval: boolean;
   command?: string;
   args?: string[];
+  workingDirectory?: string;
   dryRunPreview?: string;
 }
 
@@ -94,6 +95,14 @@ export interface MemoryRecord {
   updatedAt: string;
 }
 
+export interface WorkspaceIndexHit {
+  path: string;
+  relativePath: string;
+  modifiedAt: string;
+  size: number;
+  score: number;
+}
+
 export interface ExecutionStepAudit {
   stepId: string;
   status: "pending" | "approved" | "rejected" | "succeeded" | "failed";
@@ -120,4 +129,3 @@ export interface ModelRouteDecision {
   route: "local" | "cloud";
   reason: string;
 }
-

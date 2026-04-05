@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import type {
   ActionStep,
+  ApprovalRequest,
   ApprovalDecision,
   ExecutionAudit,
   Intent,
@@ -89,6 +90,14 @@ export async function buildServer(
     });
     const route = routeModel(intent);
     const steps = createActionPlan(intent);
+    const approvalRequests: ApprovalRequest[] = steps
+      .filter((step) => step.requiresApproval)
+      .map((step) => ({
+        actionId: step.id,
+        reason: step.description,
+        risk: step.risk,
+        requestedAt: new Date().toISOString()
+      }));
 
     const runId = `run_${nanoid()}`;
     const audit: ExecutionAudit = {
@@ -110,6 +119,7 @@ export async function buildServer(
       intent,
       route,
       steps,
+      approvalRequests,
       audit
     };
   });
@@ -205,11 +215,40 @@ export async function buildServer(
       query: string;
       scope?: string;
       limit?: number;
+      workspaceLimit?: number;
+      includeWorkspaceHits?: boolean;
+      refreshIndex?: boolean;
+      indexedPaths?: string[];
+      optOutPaths?: string[];
+      maxFiles?: number;
     };
+
+    if (body.indexedPaths || body.optOutPaths) {
+      await memory.saveWorkspaceContext({
+        profileRoot: config.profileRoot,
+        indexedPaths: body.indexedPaths,
+        optOutPaths: body.optOutPaths
+      });
+    }
+
+    if (body.refreshIndex) {
+      await memory.refreshWorkspaceIndex({
+        profileRoot: config.profileRoot,
+        indexedPaths: body.indexedPaths,
+        optOutPaths: body.optOutPaths,
+        maxFiles: body.maxFiles
+      });
+    }
+
     const records = await memory.search(body.query, body.scope, body.limit ?? 10);
+    const workspaceMatches =
+      body.includeWorkspaceHits === false
+        ? []
+        : await memory.searchWorkspaceIndex(body.query, body.workspaceLimit ?? 10);
     const workspaceContext = await memory.getWorkspaceContext(config.profileRoot);
     return {
       records,
+      workspaceMatches,
       workspaceContext
     };
   });
@@ -219,13 +258,33 @@ export async function buildServer(
       indexedPaths?: string[];
       optOutPaths?: string[];
       profileRoot?: string;
+      reindex?: boolean;
+      maxFiles?: number;
     };
     const context = await memory.saveWorkspaceContext({
       profileRoot: body.profileRoot ?? os.homedir(),
       indexedPaths: body.indexedPaths ?? [path.resolve(config.profileRoot)],
       optOutPaths: body.optOutPaths ?? []
     });
-    return { context };
+
+    const index = body.reindex
+      ? await memory.refreshWorkspaceIndex({
+          profileRoot: context.profileRoot,
+          indexedPaths: context.indexedPaths,
+          optOutPaths: context.optOutPaths,
+          maxFiles: body.maxFiles
+        })
+      : null;
+
+    return {
+      context,
+      index: index
+        ? {
+            generatedAt: index.generatedAt,
+            filesIndexed: index.files.length
+          }
+        : undefined
+    };
   });
 
   return {

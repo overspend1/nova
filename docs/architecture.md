@@ -20,6 +20,7 @@
   - scaffold inference, plan generation, and file materialization
 - `packages/memory`:
   - local memory records and workspace context defaults
+  - profile index with excludes/opt-outs for fast workspace file retrieval
 
 ## IPC Boundary
 
@@ -31,5 +32,5 @@
 
 - Mutating steps must include approval decisions.
 - Missing approval turns step status into `rejected` and run status into `blocked`.
+- Executable commands are constrained by step-kind allowlists (`install`, `git`, `network`, etc.).
 - Every run is persisted to append-only JSONL timeline.
-

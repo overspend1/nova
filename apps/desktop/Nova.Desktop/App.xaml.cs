@@ -1,18 +1,19 @@
-namespace Nova.Desktop;
-
-public partial class App : Application
+namespace Nova.Desktop
 {
-    private Window? _window;
-
-    public App()
+    public partial class App : Application
     {
-        InitializeComponent();
-    }
+        private Window? _window;
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
-    {
-        _window ??= new Window();
-        _window.Content = new MainPage();
-        _window.Activate();
+        public App()
+        {
+            InitializeComponent();
+        }
+
+        protected override void OnLaunched(LaunchActivatedEventArgs args)
+        {
+            _window ??= new Window();
+            _window.Content = new MainPage();
+            _window.Activate();
+        }
     }
 }
