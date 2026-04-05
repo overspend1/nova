@@ -25,6 +25,7 @@ interface ServerBundle {
 }
 
 const EXECUTION_CACHE_TTL_MS = 5 * 60 * 1000;
+const EXECUTION_CACHE_MAX_ENTRIES = 500;
 
 export async function buildServer(
   config: NovaCoreConfig = loadConfig()
@@ -99,10 +100,7 @@ export async function buildServer(
       metadata?: Record<string, string>;
     };
 
-    const input = typeof body.input === "string" ? body.input.trim() : "";
-    if (!input) {
-      throw new Error("Plan input is required.");
-    }
+    const input = requireNonEmptyInput(body.input, "Plan input is required.");
 
     const intent = parseIntent({
       text: input,
@@ -162,6 +160,15 @@ export async function buildServer(
         executionReplayCache.delete(key);
       }
     }
+    if (executionReplayCache.size > EXECUTION_CACHE_MAX_ENTRIES) {
+      const sortedEntries = [...executionReplayCache.entries()].sort(
+        (a, b) => a[1].createdAt - b[1].createdAt
+      );
+      const overflow = executionReplayCache.size - EXECUTION_CACHE_MAX_ENTRIES;
+      for (let index = 0; index < overflow; index += 1) {
+        executionReplayCache.delete(sortedEntries[index][0]);
+      }
+    }
     if (idempotencyKey) {
       const cached = executionReplayCache.get(idempotencyKey);
       if (cached) {
@@ -170,13 +177,17 @@ export async function buildServer(
     }
 
     const mode = body.mode ?? "execute";
-    if (!body.intent && (!body.input || typeof body.input !== "string" || body.input.trim().length === 0)) {
+    const normalizedInput = body.input === undefined ? undefined : requireNonEmptyInput(
+      body.input,
+      "Execution input must be a non-empty string."
+    );
+    if (!body.intent && !normalizedInput) {
       throw new Error("Execution requires either a valid intent or non-empty input.");
     }
     const intent =
       body.intent ??
       parseIntent({
-        text: body.input?.trim() ?? "",
+        text: normalizedInput ?? "",
         channel: body.channel ?? "text"
       });
     const steps = body.steps ?? createActionPlan(intent);
@@ -292,4 +303,17 @@ export async function buildServer(
     app,
     config
   };
+}
+
+function requireNonEmptyInput(input: unknown, errorMessage: string): string {
+  if (typeof input !== "string") {
+    throw new Error(errorMessage);
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new Error(errorMessage);
+  }
+
+  return trimmed;
 }
