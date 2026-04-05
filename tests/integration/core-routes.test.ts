@@ -14,11 +14,12 @@ describe("core routes integration", () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "nova-core-test-"));
     config = {
       pipePath: "\\\\.\\pipe\\nova-test",
-      authToken: "test-token",
+      authToken: "test-token-123456",
       profileRoot: tempDir,
       auditFilePath: path.join(tempDir, "audit", "timeline.jsonl"),
       memoryRootPath: path.join(tempDir, "memory"),
-      allowInstallCommands: false
+      allowInstallCommands: false,
+      authMinTokenLength: 16
     };
 
     const serverBundle = await buildServer(config);
@@ -35,7 +36,7 @@ describe("core routes integration", () => {
       method: "POST",
       url: "/intent/parse",
       headers: {
-        "x-nova-token": "test-token"
+        "x-nova-token": "test-token-123456"
       },
       payload: {
         input: "bootstrap a new project"
@@ -52,7 +53,7 @@ describe("core routes integration", () => {
     const upsertResponse = await app.inject({
       method: "POST",
       url: "/memory/upsert",
-      headers: { "x-nova-token": "test-token" },
+      headers: { "x-nova-token": "test-token-123456" },
       payload: {
         scope: "workspace",
         content: "use fastify for local api",
@@ -64,7 +65,7 @@ describe("core routes integration", () => {
     const searchResponse = await app.inject({
       method: "POST",
       url: "/memory/search",
-      headers: { "x-nova-token": "test-token" },
+      headers: { "x-nova-token": "test-token-123456" },
       payload: {
         query: "fastify",
         scope: "workspace"
@@ -73,5 +74,20 @@ describe("core routes integration", () => {
     expect(searchResponse.statusCode).toBe(200);
     expect(searchResponse.json().records.length).toBeGreaterThan(0);
   });
-});
 
+  it("rejects empty plan input", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/actions/plan",
+      headers: {
+        "x-nova-token": "test-token-123456"
+      },
+      payload: {
+        input: "   "
+      }
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toContain("Plan input is required");
+  });
+});

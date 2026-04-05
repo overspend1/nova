@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -73,11 +74,18 @@ public sealed class NovaCoreClient
     private string BuildRequest(string method, string endpoint, string body)
     {
         var length = Encoding.UTF8.GetByteCount(body);
+        var requestId = $"req_{Guid.NewGuid():N}";
+        var idempotencyKey = $"desktop:{method}:{endpoint}:{ComputeHash(body)}";
         var builder = new StringBuilder();
         builder.Append($"{method} {endpoint} HTTP/1.1\r\n");
         builder.Append("Host: nova-core\r\n");
         builder.Append("Connection: close\r\n");
         builder.Append($"x-nova-token: {_authToken}\r\n");
+        builder.Append($"x-nova-request-id: {requestId}\r\n");
+        if (method == "POST")
+        {
+            builder.Append($"x-nova-idempotency-key: {idempotencyKey}\r\n");
+        }
 
         if (method == "POST")
         {
@@ -92,6 +100,13 @@ public sealed class NovaCoreClient
         }
 
         return builder.ToString();
+    }
+
+    private static string ComputeHash(string input)
+    {
+        var data = Encoding.UTF8.GetBytes(input);
+        var hash = SHA256.HashData(data);
+        return Convert.ToHexString(hash);
     }
 
     private static string ParseHttpBody(string responseRaw, out int statusCode)
@@ -127,4 +142,3 @@ public sealed class NovaCoreClient
         return pipePath;
     }
 }
-

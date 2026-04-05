@@ -37,6 +37,8 @@ export async function runBootstrap(input: BootstrapExecutionInput): Promise<{
   const audit = await executePlan({
     runId: `run_${nanoid()}`,
     intentId: `intent_bootstrap_${nanoid(8)}`,
+    requestId: `req_${nanoid(10)}`,
+    idempotencyKey: `bootstrap:${spec.targetDirectory}:${spec.projectName}:${input.mode}`,
     steps,
     approvals,
     mode: input.mode,

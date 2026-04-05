@@ -76,6 +76,7 @@ public sealed partial class MainPage : Page
         await RunSafeAsync(async () =>
         {
             await EnsurePlanReadyAsync();
+            EnsureApprovalConfirmed();
             var execute = await _coreClient.PostAsync<object, JsonElement>(
                 "/actions/execute",
                 new
@@ -94,6 +95,7 @@ public sealed partial class MainPage : Page
             ResponseBox.Text = $"Execution status: {result.Audit.Status}\n"
                 + JsonSerializer.Serialize(result, _indentedJsonOptions);
             await RefreshAuditAsync();
+            ApprovalConfirmedCheckbox.IsChecked = false;
         });
     }
 
@@ -203,6 +205,15 @@ public sealed partial class MainPage : Page
         _lastPlanSteps = plan.Steps;
     }
 
+    private void EnsureApprovalConfirmed()
+    {
+        if (ApprovalConfirmedCheckbox.IsChecked != true)
+        {
+            throw new InvalidOperationException(
+                "Execution blocked. You must explicitly confirm approval before running mutating actions.");
+        }
+    }
+
     private static IReadOnlyList<object> BuildApprovals(
         IEnumerable<ActionStepDto> steps,
         bool allowWrite,
@@ -269,4 +280,3 @@ internal static class DispatcherQueueExtensions
         return tcs.Task;
     }
 }
-

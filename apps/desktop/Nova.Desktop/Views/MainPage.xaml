@@ -49,6 +49,7 @@
                 <TextBlock Text="Execution Safety" FontSize="16" FontWeight="SemiBold" />
                 <CheckBox x:Name="ApproveWritesCheckbox" Content="Approve write/bootstrap steps" IsChecked="False" />
                 <CheckBox x:Name="ApproveSystemCheckbox" Content="Approve system/install steps" IsChecked="False" />
+                <CheckBox x:Name="ApprovalConfirmedCheckbox" Content="I reviewed the plan and explicitly approve selected mutating actions" IsChecked="False" />
                 <Button Content="Execute Last Plan (Approved Steps Only)" Click="OnExecuteApprovedClicked" />
                 <TextBlock Text="Voice Mode" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <ToggleSwitch x:Name="WakeWordToggle" Header="Wake Word Loop" Toggled="OnWakeWordToggled" />

@@ -24,6 +24,8 @@ interface ServerBundle {
   config: NovaCoreConfig;
 }
 
+const EXECUTION_CACHE_TTL_MS = 5 * 60 * 1000;
+
 export async function buildServer(
   config: NovaCoreConfig = loadConfig()
 ): Promise<ServerBundle> {
@@ -32,6 +34,17 @@ export async function buildServer(
   });
   const auditLog = new AuditLog(config.auditFilePath);
   const memory = new MemoryStore(config.memoryRootPath);
+  const executionReplayCache = new Map<
+    string,
+    {
+      createdAt: number;
+      response: {
+        intent: Intent;
+        steps: ActionStep[];
+        audit: ExecutionAudit;
+      };
+    }
+  >();
   await memory.getWorkspaceContext(config.profileRoot);
 
   app.addHook("preHandler", async (request, reply) => {
@@ -40,7 +53,11 @@ export async function buildServer(
     }
 
     const token = request.headers["x-nova-token"];
-    if (token !== config.authToken) {
+    if (
+      typeof token !== "string" ||
+      token.length < config.authMinTokenLength ||
+      token !== config.authToken
+    ) {
       reply.code(401);
       throw new Error("Unauthorized request.");
     }
@@ -82,8 +99,13 @@ export async function buildServer(
       metadata?: Record<string, string>;
     };
 
+    const input = typeof body.input === "string" ? body.input.trim() : "";
+    if (!input) {
+      throw new Error("Plan input is required.");
+    }
+
     const intent = parseIntent({
-      text: body.input,
+      text: input,
       channel: body.channel,
       metadata: body.metadata
     });
@@ -123,15 +145,44 @@ export async function buildServer(
       steps?: ActionStep[];
       approvals?: Array<{ actionId: string; approved: boolean; approver?: string }>;
     };
+    const idempotencyKeyHeader = request.headers["x-nova-idempotency-key"];
+    const requestIdHeader = request.headers["x-nova-request-id"];
+    const idempotencyKey =
+      typeof idempotencyKeyHeader === "string" && idempotencyKeyHeader.trim().length > 0
+        ? idempotencyKeyHeader.trim()
+        : undefined;
+    const requestId =
+      typeof requestIdHeader === "string" && requestIdHeader.trim().length > 0
+        ? requestIdHeader.trim()
+        : undefined;
+
+    const now = Date.now();
+    for (const [key, value] of executionReplayCache.entries()) {
+      if (now - value.createdAt > EXECUTION_CACHE_TTL_MS) {
+        executionReplayCache.delete(key);
+      }
+    }
+    if (idempotencyKey) {
+      const cached = executionReplayCache.get(idempotencyKey);
+      if (cached) {
+        return cached.response;
+      }
+    }
 
     const mode = body.mode ?? "execute";
+    if (!body.intent && (!body.input || typeof body.input !== "string" || body.input.trim().length === 0)) {
+      throw new Error("Execution requires either a valid intent or non-empty input.");
+    }
     const intent =
       body.intent ??
       parseIntent({
-        text: body.input ?? "",
+        text: body.input?.trim() ?? "",
         channel: body.channel ?? "text"
       });
     const steps = body.steps ?? createActionPlan(intent);
+    if (!Array.isArray(steps) || steps.length === 0) {
+      throw new Error("Execution requires at least one action step.");
+    }
     const approvals: ApprovalDecision[] = (body.approvals ?? []).map((decision) => ({
       actionId: decision.actionId,
       approved: decision.approved,
@@ -142,13 +193,22 @@ export async function buildServer(
     const audit = await executePlan({
       runId: `run_${nanoid()}`,
       intentId: intent.id,
+      requestId,
+      idempotencyKey,
       mode,
       steps,
       approvals,
       allowInstallCommands: config.allowInstallCommands
     });
     await auditLog.append(audit);
-    return { intent, steps, audit };
+    const response = { intent, steps, audit };
+    if (idempotencyKey) {
+      executionReplayCache.set(idempotencyKey, {
+        createdAt: now,
+        response
+      });
+    }
+    return response;
   });
 
   app.post("/bootstrap/create", async (request) => {

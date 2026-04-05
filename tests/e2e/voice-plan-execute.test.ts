@@ -14,11 +14,12 @@ describe("voice -> plan -> approval -> execute -> audit", () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "nova-e2e-test-"));
     const config: NovaCoreConfig = {
       pipePath: "\\\\.\\pipe\\nova-e2e-test",
-      authToken: "e2e-token",
+      authToken: "e2e-token-123456",
       profileRoot: tempDir,
       auditFilePath: path.join(tempDir, "audit", "timeline.jsonl"),
       memoryRootPath: path.join(tempDir, "memory"),
-      allowInstallCommands: false
+      allowInstallCommands: false,
+      authMinTokenLength: 16
     };
     app = (await buildServer(config)).app;
   });
@@ -33,7 +34,7 @@ describe("voice -> plan -> approval -> execute -> audit", () => {
       method: "POST",
       url: "/actions/plan",
       headers: {
-        "x-nova-token": "e2e-token"
+        "x-nova-token": "e2e-token-123456"
       },
       payload: {
         input: "Refactor this module safely and run validation",
@@ -54,7 +55,7 @@ describe("voice -> plan -> approval -> execute -> audit", () => {
       method: "POST",
       url: "/actions/execute",
       headers: {
-        "x-nova-token": "e2e-token"
+        "x-nova-token": "e2e-token-123456"
       },
       payload: {
         mode: "execute",
@@ -70,11 +71,10 @@ describe("voice -> plan -> approval -> execute -> audit", () => {
     const auditResponse = await app.inject({
       method: "GET",
       url: "/audit/timeline",
-      headers: { "x-nova-token": "e2e-token" }
+      headers: { "x-nova-token": "e2e-token-123456" }
     });
     expect(auditResponse.statusCode).toBe(200);
     const timeline = auditResponse.json() as Array<{ intentId: string }>;
     expect(timeline.length).toBeGreaterThan(0);
   });
 });
-

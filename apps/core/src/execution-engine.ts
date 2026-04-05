@@ -4,6 +4,8 @@ import type { ActionStep, ApprovalDecision, ExecutionAudit } from "@nova/contrac
 interface ExecutePlanInput {
   runId: string;
   intentId: string;
+  requestId?: string;
+  idempotencyKey?: string;
   mode: "dry-run" | "execute";
   steps: ActionStep[];
   approvals: ApprovalDecision[];
@@ -82,6 +84,8 @@ export async function executePlan(input: ExecutePlanInput): Promise<ExecutionAud
   return {
     runId: input.runId,
     intentId: input.intentId,
+    requestId: input.requestId,
+    idempotencyKey: input.idempotencyKey,
     plannedAt: new Date().toISOString(),
     executedAt: new Date().toISOString(),
     mode: input.mode,
@@ -114,4 +118,3 @@ function runCommand(
     });
   });
 }
-

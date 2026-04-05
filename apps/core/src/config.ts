@@ -9,6 +9,7 @@ export interface NovaCoreConfig {
   auditFilePath: string;
   memoryRootPath: string;
   allowInstallCommands: boolean;
+  authMinTokenLength: number;
 }
 
 export function loadConfig(): NovaCoreConfig {
@@ -23,7 +24,8 @@ export function loadConfig(): NovaCoreConfig {
       process.env.NOVA_AUDIT_FILE ?? path.join(baseDataPath, "audit", "timeline.jsonl"),
     memoryRootPath:
       process.env.NOVA_MEMORY_ROOT ?? path.join(baseDataPath, "memory"),
-    allowInstallCommands: process.env.NOVA_ALLOW_INSTALL_COMMANDS === "true"
+    allowInstallCommands: process.env.NOVA_ALLOW_INSTALL_COMMANDS === "true",
+    authMinTokenLength: resolveMinTokenLength(process.env.NOVA_AUTH_MIN_TOKEN_LENGTH)
   };
 }
 
@@ -36,3 +38,10 @@ function resolvePipePath(input?: string): string {
   return `\\\\.\\pipe\\${pipeName}`;
 }
 
+function resolveMinTokenLength(input?: string): number {
+  const parsed = Number.parseInt(input ?? "", 10);
+  if (Number.isFinite(parsed) && parsed >= 16) {
+    return parsed;
+  }
+  return 16;
+}

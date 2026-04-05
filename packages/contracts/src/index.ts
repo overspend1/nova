@@ -106,6 +106,8 @@ export interface ExecutionStepAudit {
 export interface ExecutionAudit {
   runId: string;
   intentId: string;
+  requestId?: string;
+  idempotencyKey?: string;
   plannedAt: string;
   executedAt?: string;
   mode: "dry-run" | "execute";
@@ -120,4 +122,3 @@ export interface ModelRouteDecision {
   route: "local" | "cloud";
   reason: string;
 }
-
